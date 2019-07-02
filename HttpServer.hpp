@@ -60,13 +60,15 @@ class HttpServer{
       }if(request.ParseHttpHeader(info)==false){//解析头部
         goto out;
       }
-     // if(info.RequestIsCGI()){//判断是否是CGI请求
+      //std::cout<<info._method<<"--"<<info._query_string.size()<<"--"<<info._query_string<<std::endl;
+     if(info.RequestIsCGI()){//判断是否是CGI请求
+       std::cerr<<"Go CGIHandler"<<std::endl;
         //如果是，执行CGI响应；
-       // response.CGIHandler(info);
-     // }else{//不是则执行目录列表/文件下载响应
+        response.CGIHandler(info);
+      }else{//不是则执行目录列表/文件下载响应
       std::cerr<<"Go FileHandler！"<<std::endl;
         response.FileHandler(info);
-    // }
+      }
       close(sock);
       return true;
 out:
@@ -96,4 +98,3 @@ out:
     }
     ~HttpServer(){}
 };
-
