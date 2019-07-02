@@ -2,6 +2,7 @@
 #include<time.h>
 #include<sstream>
 #include<dirent.h>
+#include<fcntl.h>
 
 std::unordered_map<std::string,std::string> err_desc={
   {"200","OK"},
@@ -95,11 +96,11 @@ class Tools{
 class RequestInfo{
   //包含HttpRequest解析出的请求信息；
   public:
-    std::string _method="NULLL";//请求方法
-    std::string _version="NULL";//协议版本
-    std::string _path_info="NULL";//资源路径
-    std::string _path_phys="NULL";//资源实际路径
-    std::string _query_string="NULL";//查询字符串
+    std::string _method;//请求方法
+    std::string _version;//协议版本
+    std::string _path_info;//资源路径
+    std::string _path_phys;//资源实际路径
+    std::string _query_string;//查询字符串
     std::unordered_map<std::string,std::string>_hdr_list;//存储头信息中的所有键值对；
     struct stat _st;//获取其他文件信息；大小，inode。之类；
   public:
@@ -109,7 +110,7 @@ class RequestInfo{
     }
   public:
     bool RequestIsCGI(){
-      if((_method=="GET"&&!_query_string.empty())||(_method=="POST")){
+      if((_method=="GET"&&(_query_string.size()!=0))||(_method=="POST")){
         return true;
       }
       return false;
@@ -195,7 +196,7 @@ class HttpRequest{
     }
     bool PathIsLeagal(std::string& path,RequestInfo& info){
       std::string file = WWWROOT+path;
-     // std::cout<<file<<std::endl;
+       std::cout<<file<<std::endl;
       if(stat(file.c_str(),&(info._st))<0){//判断该文件存在否？
         std::cout<<"248Path Is Legal 404"<<std::endl;
         info.SetError("404");
@@ -223,11 +224,11 @@ class HttpRequest{
         size_t pos = hdr_list[i].find(':');
         info._hdr_list[hdr_list[i].substr(0,pos)]=hdr_list[i].substr(pos+2);
       }
-      for(auto it:info._hdr_list){//看看头部内容；
-        std::cout<<"["<<it.first<<":"<<it.second<<"]"<<std::endl;
-      }
-      std::cerr<<std::endl<<"Now Display info!"<<std::endl;
-      info.display();
+     /* for(auto it:info._hdr_list){//看看头部内容；
+      //  std::cout<<"["<<it.first<<":"<<it.second<<"]"<<std::endl;
+      //}
+      //std::cerr<<std::endl<<"Now Display info!"<<std::endl;
+       info.display();*/
       return true;
     }
     //向外提供解析结果；
@@ -240,6 +241,8 @@ class HttpResponse{
     std::string _etag;//文件是否被修改过，是否是源文件
     std::string _mtime;//最后一次修改时间；
     std::string _date;//当前系统响应时间；
+    std::string _fsize;//文件大小；
+    std::string _mime;//获取文件类型
     std::string _cont_len;
   public:
     HttpResponse(int sock):_cli_sock(sock)
@@ -250,6 +253,8 @@ class HttpResponse{
       Tools::MakeETag(req_info._st.st_size,req_info._st.st_ino,req_info._st.st_mtime,_etag);//ETag;
       time_t t= time(NULL);//Date
       Tools::TimeToGMT(t,_date);
+      Tools::DigitToStr(req_info._st.st_size,_fsize);
+      Tools::GetMime(req_info._path_phys,_mime);
       return true;
     }
     bool SendData(const std::string &buf){
@@ -271,7 +276,37 @@ class HttpResponse{
     }
 
     bool ProcessFile(RequestInfo& info){;//文件下载
+      std::cerr<<"NOW in ProcessFile!"<<std::endl;
+      std::string rsp_header;
+      rsp_header = info._version+" 200 OK\r\n";
+      //rsp_header+="Content-Type: text/html;charset=UTF-8\r\n";//这样返回的数据浏览器会按照文本模式打开；
+      rsp_header+="Content-Type: "+_mime+"\r\n";//这样返回的数据浏览器会按照文本模式打开；
+      rsp_header+="Connection: close\r\n";
+      rsp_header+="Content-Length: "+_fsize+"\r\n";//知道大小不用chuncked；
+      rsp_header+="ETage: "+_etag+"\r\n";
+      rsp_header+="Last-Modified: "+_mtime+"\r\n";
+      rsp_header+="Date: "+_date+"\r\n\r\n";
+      SendData(rsp_header);
+      int fd=open(info._path_phys.c_str(),O_RDONLY);
+      if(fd<0){
+        info._err_code="400";
+        ErrHandler(info);
+        return false;
+      }
+        int rlen = 0;
+        char tmp[MAX_BUFF];
+        while((rlen=read(fd,tmp,MAX_BUFF))>0){
+          //tmp[rlen]='\0';
+          //SendData(tmp);
+          send(_cli_sock,tmp,rlen,0);
+        }
+      close(fd);
       return true;
+    }
+    static int filt(const struct dirent* dir){//scandir的过滤策略；
+      if(strcmp(dir->d_name,".")==0)
+        return 0;//标识不添加到列表；
+      return 1;//添加；
     }
     bool ProcessList(RequestInfo& info){;//文件列表功能
       std::cerr<<"Now in ProcessFile"<<std::endl;
@@ -299,13 +334,18 @@ class HttpResponse{
       rsp_body += "<title>Home/Catalog</title>";
       rsp_body +="<meta charset = 'utf-8'>";
       rsp_body +="</head><body>";
-      rsp_body +="<h1>Path:"+info._path_info+"</h1><hr /><ol>";
+      rsp_body +="<h1>[Path]:"+info._path_info+"</h1>";
+      rsp_body +="<form action='/upload' method='POST' enctype='multipart/form-data'>";
+      rsp_body +="<input type='file' name='FileUpLoad' />";
+      rsp_body +="<input type='submit' value='上传' / >";
+      rsp_body +="</form>";
+      rsp_body +="<hr /><ol>";
       //获取目录下每一个文件，组织处html信息，chunked传输;
       SendCData(rsp_body);
 
       std::string file_html;
       struct dirent **p_dirent = NULL;
-      int num = scandir(info._path_phys.c_str(),&p_dirent,0,alphasort);//过滤规则：不做过滤，默认字母排序
+      int num = scandir(info._path_phys.c_str(),&p_dirent,filt,alphasort);//过滤规则：不做过滤，默认字母排序
       for(int i = 0;i<num;i++){
         file_html+= "<li>";//有序列表元素
         std::string path = info._path_phys;
@@ -338,6 +378,75 @@ class HttpResponse{
       return true;
     }
     bool ProcessCGI(RequestInfo& info){//cgi请求处理;；
+      //使用外部程序完成CGI请求处理---文件上传
+      //将http头信息和正文全都交给子进程处理
+      //使用环境变量传递头信息
+      //使用管道传递正文数据
+      //使用管道接收CGI程序处理结果
+      //流程：创建管道，创建子进程，设置子进程环境变量；
+      int data[2];//用于传输数据；
+      int back[2];//返回处理结果;
+      if(pipe(data)||pipe(back)){
+        info._err_code="500";
+        ErrHandler(info);
+        return false;
+      }
+      int pid =fork();
+      if(pid<0){
+        info._err_code = "500";
+        ErrHandler(info);
+        return false;
+      }else if(pid==0){
+        setenv("METHOD",info._method.c_str(),1);
+        setenv("VERSION",info._version.c_str(),1);
+        setenv("PATH_INFO",info._path_info.c_str(),1);
+        setenv("QUERY_STRING",info._query_string.c_str(),1);
+        for(auto it=info._hdr_list.begin();it !=info._hdr_list.end();it++){
+          setenv(it->first.c_str(),it->second.c_str(),1);
+        }
+        close(data[1]);
+        close(back[0]);
+        dup2(data[0],0);//子进程直接从标准输入读取正文数据
+        dup2(back[1],1);//子进程直接打印处理结果传递给父进程
+        execl(info._path_phys.c_str(),info._path_phys.c_str(),NULL);
+        exit(0);
+      }
+      //下面是父进程，传数据，收结果,相应客户端；
+      close(data[0]);
+      close(back[1]);
+      //1.通过data管道将正文数据传递给子进程；
+      auto it = info._hdr_list.find("Content-Length");//没找着不用提交数据给子进程
+      if(it!=info._hdr_list.end()){
+        char buf[MAX_BUFF]={0};
+        long content_len = Tools::StrToDigit(it->second);
+        int rlen=recv(_cli_sock,buf,MAX_BUFF,0);
+        if(rlen<0){
+          return false;
+        }
+        if(write(data[1],buf,rlen)<0)
+          return false;
+      }
+      //2.通过out管道读取子进程的处理结果直到返回0；
+      //3.将处理结果组织http数据，响应给客户端；
+      std::string rsp_header;
+      rsp_header = info._version+" 200 OK\r\n";
+      rsp_header+="Content-Type: text/html\r\n";//这样返回的数据浏览器会按照文本模式打开；
+      rsp_header+="Connection: close\r\n";
+      rsp_header+="ETage: "+_etag+"\r\n";
+      rsp_header+="Last-Modified: "+_mtime+"\r\n";
+      rsp_header+="Date: "+_date+"\r\n\r\n";
+      SendData(rsp_header);
+      while(1){
+        char buf[MAX_BUFF]={0};
+        int rlen=read(back[0],buf,MAX_BUFF);
+        if(rlen==0){
+          break;
+        }
+        send(_cli_sock,buf,rlen,0);
+      }
+
+      close(data[1]);
+      close(back[0]);
       return true;
     }
     bool ErrHandler(RequestInfo &info){
@@ -375,12 +484,15 @@ class HttpResponse{
     }
     bool FileHandler(RequestInfo& info){
       InitResponse(info);//初始化文件响应信息
-      if(IsDir(info)||1){//判断请求文件是否是目录
+      if(IsDir(info)){//判断请求文件是否是目录
         std::cerr<<"Now Go ProcessList!"<<std::endl;
         if(ProcessList(info))//执行文件列表展示响应
           std::cout<<"List Print Finish!"<<std::endl;
       }else{
-        ProcessFile(info);//执行文件下载相应
+        std::cerr<<"Now Go ProcessFile!"<<std::endl;
+        if(ProcessFile(info)){;//执行文件下载相应
+        std::cerr<<"Finish Send Filrdata"<<std::endl;
+        }
       }
       return true;
     }
