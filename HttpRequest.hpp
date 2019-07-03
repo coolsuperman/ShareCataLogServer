@@ -196,7 +196,7 @@ class HttpRequest{
     }
     bool PathIsLeagal(std::string& path,RequestInfo& info){
       std::string file = WWWROOT+path;
-       std::cout<<file<<std::endl;
+      std::cout<<file<<std::endl;
       if(stat(file.c_str(),&(info._st))<0){//判断该文件存在否？
         std::cout<<"248Path Is Legal 404"<<std::endl;
         info.SetError("404");
@@ -224,11 +224,11 @@ class HttpRequest{
         size_t pos = hdr_list[i].find(':');
         info._hdr_list[hdr_list[i].substr(0,pos)]=hdr_list[i].substr(pos+2);
       }
-     /* for(auto it:info._hdr_list){//看看头部内容；
+      /* for(auto it:info._hdr_list){//看看头部内容；
       //  std::cout<<"["<<it.first<<":"<<it.second<<"]"<<std::endl;
       //}
       //std::cerr<<std::endl<<"Now Display info!"<<std::endl;
-       info.display();*/
+      info.display();*/
       return true;
     }
     //向外提供解析结果；
@@ -293,13 +293,13 @@ class HttpResponse{
         ErrHandler(info);
         return false;
       }
-        int rlen = 0;
-        char tmp[MAX_BUFF];
-        while((rlen=read(fd,tmp,MAX_BUFF))>0){
-          //tmp[rlen]='\0';
-          //SendData(tmp);
-          send(_cli_sock,tmp,rlen,0);
-        }
+      int rlen = 0;
+      char tmp[MAX_BUFF];
+      while((rlen=read(fd,tmp,MAX_BUFF))>0){
+        //tmp[rlen]='\0';
+        //SendData(tmp);
+        send(_cli_sock,tmp,rlen,0);
+      }
       close(fd);
       return true;
     }
@@ -356,11 +356,11 @@ class HttpResponse{
         std::string mtime;
         std::string mime;
         std::string fsize;
-       //std::cout<<"st_mtime:"<<st.st_mtime<<"-"<<"st_mime:"<<p_dirent[i]->d_name<<"-"<<"st_fsize:"<<st.st_size<<std::endl;
+        //std::cout<<"st_mtime:"<<st.st_mtime<<"-"<<"st_mime:"<<p_dirent[i]->d_name<<"-"<<"st_fsize:"<<st.st_size<<std::endl;
         Tools::TimeToGMT(st.st_mtime,mtime);
         Tools::GetMime(p_dirent[i]->d_name,mime);
         Tools::DigitToStr(st.st_size,fsize);
-       //std::cout<<"mtime:"<<mtime<<"-"<<"mime:"<<mime<<"-"<<"fsize:"<<fsize<<std::endl;
+        //std::cout<<"mtime:"<<mtime<<"-"<<"mime:"<<mime<<"-"<<"fsize:"<<fsize<<std::endl;
         file_html+="<strong><a href='"+ info._path_info;
         file_html+=p_dirent[i]->d_name;
         file_html+="'>";
@@ -384,6 +384,7 @@ class HttpResponse{
       //使用管道传递正文数据
       //使用管道接收CGI程序处理结果
       //流程：创建管道，创建子进程，设置子进程环境变量；
+      std::cerr<<"Now in ProcessCGI"<<std::endl;
       int data[2];//用于传输数据；
       int back[2];//返回处理结果;
       if(pipe(data)||pipe(back)){
@@ -419,12 +420,17 @@ class HttpResponse{
       if(it!=info._hdr_list.end()){
         char buf[MAX_BUFF]={0};
         long content_len = Tools::StrToDigit(it->second);
-        int rlen=recv(_cli_sock,buf,MAX_BUFF,0);
-        if(rlen<0){
-          return false;
+        int tlen=0;
+        while(tlen<content_len){
+          int len=MAX_BUFF>(content_len-tlen)?(content_len):MAX_BUFF;
+          int rlen=recv(_cli_sock,buf,len,0);
+          if(rlen<0){
+            return false;
+          }
+          if(write(data[1],buf,rlen)<0)
+            return false;
+          tlen+=rlen;
         }
-        if(write(data[1],buf,rlen)<0)
-          return false;
       }
       //2.通过out管道读取子进程的处理结果直到返回0；
       //3.将处理结果组织http数据，响应给客户端；
@@ -466,6 +472,7 @@ class HttpResponse{
       return true;
     }
     bool CGIHandler(RequestInfo& info){
+      std::cout<<"Now in CGIHandler"<<std::endl;
       InitResponse(info);
       ProcessCGI(info);
       return true;
@@ -491,7 +498,7 @@ class HttpResponse{
       }else{
         std::cerr<<"Now Go ProcessFile!"<<std::endl;
         if(ProcessFile(info)){;//执行文件下载相应
-        std::cerr<<"Finish Send Filrdata"<<std::endl;
+          std::cerr<<"Finish Send Filrdata"<<std::endl;
         }
       }
       return true;
