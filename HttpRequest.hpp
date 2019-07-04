@@ -133,7 +133,7 @@ class HttpRequest{
     HttpRequest(int sock):_cli_sock(sock)
   {}
     bool RecvHttpHeader(RequestInfo& info){//接收http请求头
-      std::cerr<<"Now 接收http请求头"<<std::endl;
+     // std::cerr<<"Now 接收http请求头"<<std::endl;
       char tmp[MAX_HTTPHDR]={0};
       while(1){
         std::cerr<<"In RecvHeader Loop"<<std::endl;
@@ -157,7 +157,7 @@ class HttpRequest{
         int hdr_len = ptr-(char*)tmp;
         header.assign(tmp,hdr_len);
         recv(_cli_sock,tmp,hdr_len+4,0);//真正取了，把后面的四个字符也取了
-        std::cout<<"HHHHH:"<<header<<std::endl;
+        std::cout<<"Header:"<<header<<std::endl<<std::endl<<tmp<<std::endl;
         break;
       }
       return true;
@@ -215,7 +215,7 @@ class HttpRequest{
       return true;
     }
     bool ParseHttpHeader(RequestInfo& info){//解析http请求头；
-      std::cerr<<"解析http请求头"<<std::endl;
+     // std::cerr<<"解析http请求头"<<std::endl;
       std::vector<std::string> hdr_list;
       Tools::Split(header,"\r\n",hdr_list);
       if(ParseHttpFirstLine(hdr_list[0],info)==false)
@@ -276,7 +276,7 @@ class HttpResponse{
     }
 
     bool ProcessFile(RequestInfo& info){;//文件下载
-      std::cerr<<"NOW in ProcessFile!"<<std::endl;
+     // std::cerr<<"NOW in ProcessFile!"<<std::endl;
       std::string rsp_header;
       rsp_header = info._version+" 200 OK\r\n";
       //rsp_header+="Content-Type: text/html;charset=UTF-8\r\n";//这样返回的数据浏览器会按照文本模式打开；
@@ -309,7 +309,7 @@ class HttpResponse{
       return 1;//添加；
     }
     bool ProcessList(RequestInfo& info){;//文件列表功能
-      std::cerr<<"Now in ProcessFile"<<std::endl;
+     // std::cerr<<"Now in ProcessFile"<<std::endl;
       //组织头部：首行；
       //content-Type:text/html\r\n
       //ETage:\r\n
@@ -397,6 +397,7 @@ class HttpResponse{
         info._err_code = "500";
         ErrHandler(info);
         return false;
+            std::cerr<<"middle boundry match fail!"<<std::endl;
       }else if(pid==0){
         setenv("METHOD",info._method.c_str(),1);
         setenv("VERSION",info._version.c_str(),1);
@@ -448,6 +449,7 @@ class HttpResponse{
         if(rlen==0){
           break;
         }
+        std::cerr << "recv child buf:"<<buf << std::endl;
         send(_cli_sock,buf,rlen,0);
       }
 
@@ -472,7 +474,7 @@ class HttpResponse{
       return true;
     }
     bool CGIHandler(RequestInfo& info){
-      std::cout<<"Now in CGIHandler"<<std::endl;
+     //std::cout<<"Now in CGIHandler"<<std::endl;
       InitResponse(info);
       ProcessCGI(info);
       return true;

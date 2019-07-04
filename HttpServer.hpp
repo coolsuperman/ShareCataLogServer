@@ -51,7 +51,7 @@ class HttpServer{
     ServSocket socket;
   private:
     static bool HttpHandler (int sock){
-      std::cerr<<"Now HttpHandler"<<std::endl;
+     //std::cerr<<"Now HttpHandler"<<std::endl;
       HttpRequest request(sock);
       HttpResponse response(sock);
       RequestInfo info;
@@ -62,11 +62,11 @@ class HttpServer{
       }
       //std::cout<<info._method<<"--"<<info._query_string.size()<<"--"<<info._query_string<<std::endl;
      if(info.RequestIsCGI()){//判断是否是CGI请求
-       std::cerr<<"Go CGIHandler"<<std::endl;
+       //std::cerr<<"Go CGIHandler"<<std::endl;
         //如果是，执行CGI响应；
         response.CGIHandler(info);
       }else{//不是则执行目录列表/文件下载响应
-      std::cerr<<"Go FileHandler！"<<std::endl;
+      //std::cerr<<"Go FileHandler！"<<std::endl;
         response.FileHandler(info);
       }
       close(sock);
