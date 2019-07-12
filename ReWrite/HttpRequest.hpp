@@ -1,9 +1,5 @@
 #include"Tools.hpp"
 
-#define MAX_HTTPHD 4096
-#define FLODER "WWW"
-#define MAX_PATH 256
-#define MAX_BUFF 4096
 
 
 class HttpRequest{
@@ -38,11 +34,12 @@ class HttpRequest{
         recv(cli_sock,tmp,hdr_len+4,0);//真正取掉；
         break;
       }
+      std::cout<<header<<tmp<<std::endl;
       return true;
     }
     bool PathIsLeagal (std::string& path,RequestInfo& info){
       std::string file = FLODER+path;
-      std::cout<<file<<std::endl;
+      std::cout<<"Path:"<<file<<std::endl;
       if(stat(file.c_str(),&(info._st))<0){//判断文件是否存在
         std::cout<<" Path is illegal !"<<std::endl;
         info.SetError("404");

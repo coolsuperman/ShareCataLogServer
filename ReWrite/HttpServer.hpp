@@ -82,8 +82,13 @@ class Server{//服务器模块--饿汉模式
       std::cerr<<"SeverInit Fail!"<<std::endl;
       return false;
     }
+    static void Err(int socket,RequestInfo& info){
+      Err_Send err(socket);
+      GoWork(err,info);
+      close(socket);
+    }
     static bool GoWork(ResponseBasic& work,RequestInfo& info){//多态运行响应模块
-      work.Response(info);
+      return work.Response(info);
     }
     static bool Header(int socket){
       HttpRequest request(socket);
@@ -92,23 +97,32 @@ class Server{//服务器模块--饿汉模式
         if(request.ParseHttpHeader(info)==true){//都正确，进入响应
           if(info.RequestIsCGI()){
             CGI_Upload upload(socket);
-            GoWork(upload,info);
+            if(GoWork(upload,info)==false){
+              Err(socket,info);
+              return false;
+            }
           }else{
             if(Tools::IsDir(info)){
               File_List plist(socket);
-              GoWork(plist,info);
+              if(GoWork(plist,info)==false){
+                Err(socket,info);
+                return false;
+              }
             }else{
               File_Download dw(socket);
-              GoWork(dw,info);
+              if(GoWork(dw,info)==false){
+                std::cerr<<"DW-GoWork--false"<<std::endl;
+                Err(socket,info);
+                return false;
+              }
             }
           }
+          close(socket);
+          std::cerr<<"正确返回"<<std::endl;
           return true;
         }
       }
-      std::cerr<<"Send Err"<<std::endl;
-      Err_Send err(socket);
-      GoWork(err,info);
-      close(socket);
+      Err(socket,info);
       return false;
     }
     void Go(){

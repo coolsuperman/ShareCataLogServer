@@ -1,7 +1,7 @@
 #include"HttpServer.hpp"
 
 
-Server Server::http_serv;
+//Server Server::http_serv;
 
 void Note(){
   std::cout<<"Add IP and Port!"<<std::endl;

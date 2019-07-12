@@ -1,3 +1,4 @@
+#pragma once
 #include<sys/types.h>
 #include<iostream>
 #include<sys/socket.h>
@@ -15,6 +16,10 @@
 #include<unistd.h>
 #include<vector>
 
+const int MAX_BUFF=4096;
+const std::string FLODER="Web";
+const int MAX_PATH=256;
+const int MAX_HTTPHD = 4096;
 
 std::unordered_map<std::string,std::string> err_exp={
   {"200","OK"},
@@ -34,7 +39,7 @@ std::unordered_map<std::string,std::string> type={
   {"png","image/png"},
   {"zip","application/zip"},
   {"mp3","audio/mpeg"},
-  {"unkonw","application/octet-stream"}
+  {"unknow","application/octet-stream"}
 };
 
 
@@ -47,7 +52,7 @@ class RequestInfo{
     std::string _query_string;
     std::unordered_map<std::string,std::string> hd_list;//存储键值对；
     struct stat _st;//获取文件信息；
-    std::string _err_code;
+    std::string _err_code="200";
   public:
     void SetError(std::string err){
       _err_code = err;
@@ -92,5 +97,42 @@ class Tools{
         return true;
       }
       return false;
+    }
+    static void TimeToGMT(time_t t,std::string& GMT){//转化为格林威治时间
+      struct tm* mt = gmtime(&t);
+      char tmp[128]={0};
+      int len = strftime(tmp,127,"%a, %d %b %Y %H:%M:%S GMT",mt);
+      GMT.assign(tmp,len);
+    }
+    static int64_t StrToDigit(std::string& str){
+      int64_t num;
+      std::stringstream ss;
+      ss<<str;
+      ss>>num;
+      return num;
+    }
+    static void DigitToStr(int64_t num,std::string& str){
+      std::stringstream ss;
+      ss<<num;
+      str=ss.str();
+    }
+    static void MakeETag(int64_t size,int64_t in,int64_t lmodf,std::string& etag){
+      std::stringstream ss;
+      ss<<"\""<<std::hex<<in<<"-"<<std::hex<<size<<"-"<<std::hex<<lmodf<<"\"";
+      etag = ss.str();
+    }
+    static void GetType(const std::string& file,std::string &mime){
+      size_t pos=file.find_last_of(".");
+      if(pos==std::string::npos){
+        mime=type["unknow"];
+        return;
+      }
+      std::string suffix = file.substr(pos+1);
+      auto it = type.find(suffix);
+      if(it==type.end()){
+        mime=type["unknow"];
+        return;
+      }
+      mime = it->second;
     }
 };

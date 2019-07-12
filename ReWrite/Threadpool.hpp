@@ -53,7 +53,7 @@ class ThreadPool{
       return NOW_pthread>=MAX_pthread?1:0;
     }
     bool IsEmpty(){
-      return NOW_pthread==0?1:0;
+      return !(Queue.size());
     }
     void TaskGet(Task& s){
       s = Queue.front();
