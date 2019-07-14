@@ -68,7 +68,7 @@ class Err_Send : public ResponseBasic{//错误码发送衍生类
       Tools::DigitToStr(_rsp_body.size(),_fsize);
       _rsp_header+="Content-Length: "+_fsize+"\r\n\r\n";
       RspBody(info);
-      std::cerr<<_rsp_header<<std::endl;
+      std::cerr<<"Response:"<<std::endl<<_rsp_header<<std::endl;
       SendData(_rsp_header);
       std::cerr<<_rsp_body<<std::endl;
       SendCData(_rsp_body);
@@ -78,8 +78,7 @@ class Err_Send : public ResponseBasic{//错误码发送衍生类
     virtual bool Response(RequestInfo& info)override{
       std::cerr<<"Err Response  "<<info._err_code<<std::endl;
       InitResponse(info);
-      ProccessRun(info);
-      return true;
+      return ProccessRun(info);
     }
 };
 
@@ -154,8 +153,7 @@ class File_List : public ResponseBasic{//文件目录衍生类
     virtual bool Response(RequestInfo& info)override{
       std::cerr<<"Reaponse:"<<std::endl;
       InitResponse(info);
-      ProccessRun(info);
-      return true;
+      return ProccessRun(info);
     }
 };
 
@@ -226,11 +224,8 @@ class CGI_Upload : public ResponseBasic{//上传文件衍生类
       return true;
     }
     virtual bool Response(RequestInfo& info)override{
-      if(InitResponse(info)){
-        if(ProccessRun(info))
-          return true;
-      }
-      return false;
+      InitResponse(info);
+      return ProccessRun(info);
     }
 };
 
@@ -250,6 +245,8 @@ class File_Download : public ResponseBasic{//文件下载衍生类
         send(_cli_sock,tmp,rlen,0);
       }
       close(fd);
+      //_rsp_body="<html><body><h1>DownLoad Seccess!</h1></body></html><br/>";
+      //SendData(_rsp_body);
       return true;
     }
     virtual bool ProccessRun(RequestInfo& info)override{
@@ -259,13 +256,76 @@ class File_Download : public ResponseBasic{//文件下载衍生类
       _rsp_header+="Accept-Ranges: bytes\r\n\r\n";
       std::cerr<<_rsp_header<<std::endl;
       SendData(_rsp_header);
-      if(RspBody(info)==false)
-        return false;
-      return true;
+      return RspBody(info);
     }
     virtual bool Response(RequestInfo& info)override{
       InitResponse(info);
-      ProccessRun(info);
+      return ProccessRun(info);
+    }
+};
+
+class Part_Download : public ResponseBasic{
+  public:
+    Part_Download(int socket):ResponseBasic(socket){}
+    virtual bool RspBody(RequestInfo& info)override{
+      int fd=open(info._path_phys.c_str(),O_RDONLY);
+      if(fd<0){
+        info._err_code="400";
+        return false;
+      }
+      lseek(fd,start,SEEK_SET);
+      int64_t blen=end-start+1,rlen,flen=0;
+      char tmp[MAX_BUFF]={0};
+      while((rlen=read(fd,tmp,MAX_BUFF))>0){
+        if(rlen+flen>blen){
+          send(_cli_sock,tmp,blen-flen,0);
+          break;
+        }else{
+          flen+=rlen;
+          send(_cli_sock,tmp,rlen,0);
+        }
+      }
+      close(fd);
       return true;
     }
+//通用头部组织包含：首行、Date:,Connection:,Transfer-Encoding:,Etag:,Last-Modified;
+    virtual bool ProccessRun(RequestInfo& info)override{
+      CommonHeader(info);
+      _rsp_header+="Content-Type: "+_ftype+"\r\n";
+      std::string len;
+      Tools::DigitToStr(end-start+1,len);
+      _rsp_header+="Content-Range: bytes "+Tools::DigitToStr(start)+"-"+Tools::DigitToStr(end)+"/"+_fsize+"\r\n";
+      _rsp_header+="Content-Length: "+len+"\r\n";
+      _rsp_header+="Accept-Ranges: bytes\r\n\r\n";
+      SendData(_rsp_header);
+      return RspBody(info);
+    }
+    virtual bool Response(RequestInfo& info)override{
+      InitResponse(info);
+      info._err_code="206";
+      for(int i=0;i<info._part;i++){
+        if(ProccessRun(info)==false)
+          return false;
+      }
+      info._count=0;
+      return true;
+    }
+    void GetRange(RequestInfo& info){
+      std::string range=info._part_list[info._count];
+      info._count++;
+      size_t pos=range.find("-");
+      if(pos==0){
+        end=Tools::StrToDigit(_fsize)-1;
+        start=end-Tools::StrToDigit(range.substr(pos+1));
+      }else if(pos==range.size()-1){
+        end=Tools::StrToDigit(_fsize)-1;
+        start=Tools::StrToDigit(range.substr(0,range.size()-1));
+      }else{
+        start=Tools::StrToDigit(range.substr(0,pos));
+        end=Tools::StrToDigit(range.substr(pos+1));
+      }
+    }
+  protected:
+      std::string range;
+      int start=0,end=0;
 };

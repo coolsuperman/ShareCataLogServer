@@ -23,6 +23,7 @@ const int MAX_HTTPHD = 4096;
 
 std::unordered_map<std::string,std::string> err_exp={
   {"200","OK"},
+  {"206","PARTIAL CONTENT"},
   {"400","Bad Request"},
   {"403","Forbidden"},
   {"404","Not Found"},
@@ -39,17 +40,21 @@ std::unordered_map<std::string,std::string> type={
   {"png","image/png"},
   {"zip","application/zip"},
   {"mp3","audio/mpeg"},
+  {"ico","application/x-ico"},
   {"unknow","application/octet-stream"}
 };
 
 
 class RequestInfo{
   public:
+    int _part;
+    int _count=0;
     std::string _method;
     std::string _version;
     std::string _path_info;
     std::string _path_phys;
     std::string _query_string;
+    std::vector<std::string> _part_list;
     std::unordered_map<std::string,std::string> hd_list;//存储键值对；
     struct stat _st;//获取文件信息；
     std::string _err_code="200";
@@ -104,7 +109,7 @@ class Tools{
       int len = strftime(tmp,127,"%a, %d %b %Y %H:%M:%S GMT",mt);
       GMT.assign(tmp,len);
     }
-    static int64_t StrToDigit(std::string& str){
+    static int64_t StrToDigit(const std::string& str){
       int64_t num;
       std::stringstream ss;
       ss<<str;
@@ -115,6 +120,11 @@ class Tools{
       std::stringstream ss;
       ss<<num;
       str=ss.str();
+    }
+    static std::string DigitToStr(int64_t num){
+      std::stringstream ss;
+      ss<<num;
+      return ss.str();
     }
     static void MakeETag(int64_t size,int64_t in,int64_t lmodf,std::string& etag){
       std::stringstream ss;
@@ -134,5 +144,22 @@ class Tools{
         return;
       }
       mime = it->second;
+    }
+    static bool IsPartDW(RequestInfo& info){
+      std::string mtime,_etag;
+      auto it=info.hd_list.find("If-Range");
+      TimeToGMT(info._st.st_mtime,mtime);
+      MakeETag(info._st.st_size,info._st.st_ino,info._st.st_mtime,_etag);
+      if(it!=info.hd_list.end()&&(it->second==mtime||it->second==_etag)){
+        it=info.hd_list.find("Range");
+        if(it!=info.hd_list.end()){
+          std::cerr<<"Parse Range"<<std::endl;
+          std::string range=it->second.substr(it->second.find("=")+1);
+          std::cerr<<"Range:"<<range<<std::endl;
+          info._part=Split(range,",",info._part_list);
+          return true;
+        }
+      }
+      return false;
     }
 };

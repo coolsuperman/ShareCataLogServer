@@ -101,7 +101,14 @@ class Server{//服务器模块--饿汉模式
               Err(socket,info);
               return false;
             }
-          }else{
+          }else if(Tools::IsPartDW(info)){
+            Part_Download PD(socket);
+            if(GoWork(PD,info)==false){
+              Err(socket,info);
+              return false;
+            }
+          }
+          else{
             if(Tools::IsDir(info)){
               File_List plist(socket);
               if(GoWork(plist,info)==false){
