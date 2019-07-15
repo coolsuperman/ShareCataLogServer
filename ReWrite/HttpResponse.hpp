@@ -1,5 +1,5 @@
 #include"Tools.hpp"
-
+#include"MySQL.hpp"
 //通用头部组织包含：首行、Date:,Connection:,Transfer-Encoding:,Etag:,Last-Modified;
 
 class ResponseBasic{//响应基类
@@ -19,10 +19,11 @@ class ResponseBasic{//响应基类
     } 
     bool InitResponse(RequestInfo& req_info){
       std::cerr<<"Initing "<<std::endl;
-      Tools::TimeToGMT(req_info._st.st_mtime,_lmod);
+      SQL.InitSQL("localhost","root","199805","HttpSever");
       Tools::MakeETag(req_info._st.st_size,req_info._st.st_ino,req_info._st.st_mtime,_etag);
       time_t t = time(NULL);//Date;
       Tools::TimeToGMT(t,_date);
+      Tools::TimeToGMT(req_info._st.st_mtime,_lmod);
       Tools::DigitToStr(req_info._st.st_size,_fsize);
       Tools::GetType(req_info._path_phys,_ftype);
       return true;
@@ -45,6 +46,7 @@ class ResponseBasic{//响应基类
       return true;
     }
   protected:
+    mySQL SQL;
     int _cli_sock;
     std::string _rsp_header;
     std::string _rsp_body;
@@ -107,26 +109,28 @@ class File_List : public ResponseBasic{//文件目录衍生类
       SendCData(_rsp_body);
 
       std::string file_html;
-      struct dirent **p_dirent = NULL;
-      int num = scandir(info._path_phys.c_str(),&p_dirent,filt,alphasort);//过滤规则：不做过滤，默认字母排序
-      for(int i = 0;i<num;i++){
+      //struct dirent **p_dirent = NULL;
+      //int num = scandir(info._path_phys.c_str(),&p_dirent,filt,alphasort);//过滤规则：不做过滤，默认字母排序
+      SQL.Select("root");
+      //int num=SQL.Data.size();
+      for(auto it:SQL.Data){
         file_html+= "<li>";//有序列表元素
-        std::string path = info._path_phys;
-        std::string file = path+"/"+p_dirent[i]->d_name;
-        struct stat st;
-        if(stat(file.c_str(),&st)<0)//获取文件信息；
-          continue;
-        std::string mtime;
-        std::string mime;
-        std::string fsize;
+        //std::string path = info._path_phys;
+        //std::string file = path+"/"+p_dirent[i]->d_name;
+        //struct stat st;
+        //if(stat(file.c_str(),&st)<0)//获取文件信息；
+          //continue;
+        std::string mtime=it.find("add_time")->second;
+        std::string mime=it.find("Mime")->second;
+        std::string fsize=it.find("Bytes")->second;
         //std::cout<<"st_mtime:"<<st.st_mtime<<"-"<<"st_mime:"<<p_dirent[i]->d_name<<"-"<<"st_fsize:"<<st.st_size<<std::endl;
-        Tools::TimeToGMT(st.st_mtime,mtime);
-        Tools::GetType(p_dirent[i]->d_name,mime);
-        Tools::DigitToStr(st.st_size,fsize);
+       //Tools::TimeToGMT(st.st_mtime,mtime);
+        //Tools::GetType(p_dirent[i]->d_name,mime);
+        //Tools::DigitToStr(st.st_size,fsize);
         file_html+="<strong><a href='"+ info._path_info;
-        file_html+=p_dirent[i]->d_name;
+        file_html+=it.find("Name")->second;
         file_html+="'>";
-        file_html+=p_dirent[i]->d_name;
+        file_html+=it.find("Name")->second;
         file_html+= "</a></strong>";
         file_html+="<br/ ><small>";
         file_html+="Modf: "+mtime+"<br />";
@@ -221,12 +225,36 @@ class CGI_Upload : public ResponseBasic{//上传文件衍生类
       }
       close(in[1]);
       close(out[0]);
+      Shmat shm;//获取子进程传来的文件名；
+      shm.shmid=shm.getShm(1024);
+      shm.Recv();
+      filepath=shm.Data;
+      shm.destroyShm(shm.shmid);
+      //std::cerr<<filename<<std::endl;
       return true;
     }
     virtual bool Response(RequestInfo& info)override{
       InitResponse(info);
-      return ProccessRun(info);
+      ProccessRun(info);
+      if(stat(filepath.c_str(),&info._st)<0){
+        std::cerr<<"Update Filestat Failed!"<<std::endl;
+        exit(-2);
+      }
+      Tools::TimeToGMT(info._st.st_mtime,_lmod);//将该文件信息放入数据库中；
+      Tools::DigitToStr(info._st.st_size,_fsize);
+      char tmp[MAX_BUFF]={0};
+      realpath(filepath.c_str(),tmp);
+      fileRealpath=tmp;
+      Tools::GetType(fileRealpath,_ftype);
+      std::string filename=filepath.substr(filepath.find_last_of('/')+1);
+      std::cerr<<filename<<std::endl;
+      std::string ins="'"+filename+"','"+_ftype+"','"+_fsize+"','"+_lmod+"','"+filepath+"'";
+      SQL.Insert(ins,"root");
+      return true;
     }
+  protected:
+    std::string filepath;
+    std::string fileRealpath;
 };
 
 class File_Download : public ResponseBasic{//文件下载衍生类

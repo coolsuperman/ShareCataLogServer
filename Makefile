@@ -1,8 +1,11 @@
-all:main upload
-main:HttpGo.cpp
-	g++  $^ -o $@ -std=c++11  -lpthread
-upload:upload.cpp HttpRequest.hpp
-	g++  $^ -o $@ -std=c++11 
+all:main upload 
+main:Start.cc
+	g++ $^ -o $@ -std=c++11 -lpthread `mysql_config --cflags --libs`
+upload:upload.cc 
+	g++  $^ -o $@ -std=c++11 `mysql_config --cflags --libs` 
+	mv upload ./Web/
+SQL:MySQL.hpp SQL.cc
+	g++ $^ -o $@ -std=c++11 `mysql_config --cflags --libs` 
 .PHONY:
 clean:
-	rm ./main ./upload
+	rm ./main ./Web/upload

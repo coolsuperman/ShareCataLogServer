@@ -80,6 +80,9 @@ class Upload{
     }
     bool CreateFile(){
       std::string path = "./Web/"+_file_name;
+      Shmat sh;
+      sh.shmid=sh.createShm(1024);
+      sh.Send(path);
       _file_fd=open(path.c_str(),O_CREAT|O_WRONLY,0664);
       if(_file_fd<0){
         fprintf(stderr,"open error:%s\n",strerror(errno));

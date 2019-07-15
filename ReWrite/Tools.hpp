@@ -1,16 +1,18 @@
 #pragma once
-#include<sys/types.h>
 #include<iostream>
-#include<sys/socket.h>
 #include<string>
 #include<arpa/inet.h>
 #include<pthread.h>
 #include<queue>
 #include<sys/signal.h>
+#include<sys/ipc.h>
+#include<sys/socket.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/shm.h>
 #include<unordered_map>
 #include<fcntl.h>
 #include<dirent.h>
-#include<sys/stat.h>
 #include<sstream>
 #include<cstring>
 #include<unistd.h>
@@ -20,6 +22,9 @@ const int MAX_BUFF=4096;
 const std::string FLODER="Web";
 const int MAX_PATH=256;
 const int MAX_HTTPHD = 4096;
+
+#define PATHNAME "./"
+#define PROJ_ID  0x66
 
 std::unordered_map<std::string,std::string> err_exp={
   {"200","OK"},
@@ -121,6 +126,7 @@ class Tools{
       ss<<num;
       str=ss.str();
     }
+
     static std::string DigitToStr(int64_t num){
       std::stringstream ss;
       ss<<num;
@@ -162,4 +168,55 @@ class Tools{
       }
       return false;
     }
+};
+
+class Shmat{
+public:
+  std::string Data;
+  int shmid;
+  void Send(std::string str){
+    char* data=(char*)shmat(shmid,NULL,0);
+    strcpy(data,str.c_str());
+ //   shmdt(data);
+  }
+  void Recv(){
+    //std::cerr<<"In Recv"<<std::endl;
+    char* data=(char*)shmat(shmid,NULL,0);
+    std::cerr<<data<<std::endl;
+    Data=data;
+    shmdt(data);
+  }
+  int destroyShm(int shmid)
+  {
+    if(shmctl(shmid, IPC_RMID, NULL) < 0){
+      perror("shmctl");
+      return -1;
+    }
+    return 0;
+  }
+  int createShm(int size)
+  {
+    return commShm(size, IPC_CREAT|IPC_EXCL|0666);
+
+  }
+  int getShm(int size)
+  {
+    return commShm(size, IPC_CREAT);
+  }
+private:
+  static int commShm(int size, int flags)
+  {
+    key_t _key = ftok(PATHNAME, PROJ_ID);
+    //std::cerr<<_key<<std::endl;
+    if(_key < 0){
+      perror("ftok");
+      return -1;
+    }
+    int shmid = 0;
+    if( (shmid = shmget(_key, size, flags)) <= 0 ){
+      perror("shmget");
+      return -2;
+    }
+    return shmid;
+  }
 };
